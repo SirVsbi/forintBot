@@ -7,23 +7,25 @@ import json
 import datetime
 import discord
 from dotenv import load_dotenv
-from discord.ext import commands
+import asyncio
+from discord.ext import commands, tasks
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
+CHANNEL_ID = os.getenv('CHANNEL_ID')
 
 client = commands.Bot(command_prefix='/')
 
 
-def getEUR_HUF_exhange_rate():
+def getEUR_HUF_exchange_rate() -> float:
     exchange_rate = convert('eur', 'huf', 1)
     rate_json = json.loads(exchange_rate)
     save_exchange_rate(rate_json["amount"])
     return rate_json["amount"]
 
 
-def get_any_to_any_exchange_rate(currency_from: str, currency_to: str, amount: int) -> float:
+def get_any_to_any_exchange_rate(currency_from: str, currency_to: str, amount: float) -> float:
     exchange_rate = convert(currency_from, currency_to, amount)
     rate_json = json.loads(exchange_rate)
     return rate_json["amount"]
@@ -81,44 +83,39 @@ async def on_ready():
     )
     members = '\n - '.join([member.name for member in guild.members])
     print(f'Guild Members:\n - {members}')
-    channel = client.get_channel(990292982274097302)
-    print(channel)
-
-
-#   await channel.send(embed=generate_embed())
-
-
-@client.event
-async def send_message(message):
-    pass
 
 
 @client.command()
 async def árfolyam(ctx, *args):
     if len(args) == 0:
-        exchange_rate = getEUR_HUF_exhange_rate()
+        exchange_rate = getEUR_HUF_exchange_rate()
         embed = generate_embed("EUR", "HUF", exchange_rate)
     elif len(args) == 1:
-        embed = exchange_any_to_huf(args[0])
-    elif len(args):
+        embed = exchange_any_to_any(args[0])
+    elif len(args) == 2:
         embed = exchange_any_to_any(args[0], args[1])
+    elif len(args) == 3:
+        embed = exchange_any_to_any(args[0], args[1], float(args[2]))
     channel = client.get_channel(990292982274097302)
     await ctx.channel.send(embed=embed)
 
 
-def exchange_any_to_any(currency_from = "eur", currency_to = "huf", amount = 1) -> discord.Embed:
+def exchange_any_to_any(currency_from: str = "eur", currency_to: str = "huf", amount: float = 1) -> discord.Embed:
     exchange_rate = get_any_to_any_exchange_rate(currency_from, currency_to, amount)
     if exchange_rate == 0:
-        return generate_embed(currency_from, "HUF", 0, "Hibás valuta")
-    return generate_embed(currency_from, "HUF", exchange_rate)
+        return generate_embed(currency_from, currency_to, 0, "Hibás valuta")
+    return generate_embed(currency_from, currency_to, exchange_rate)
+
+
+@client.event
+async def on_ready():
+    send_exchange_rate.start()
+
+
+@tasks.loop(hours=1.0)
+async def send_exchange_rate():
+    channel = client.get_channel(990292982274097302)
+    await channel.send(embed=generate_embed("EUR", "HUF", getEUR_HUF_exchange_rate()))
 
 
 client.run(TOKEN)
-
-
-def printExchangeRate():
-    # Converted without comma like 70000.00
-    print(convert('huf', 'eur', 1))
-
-    # Converted amount with comma like 70,000.00
-    print(convert('eur', 'huf', 1))
