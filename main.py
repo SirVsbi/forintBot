@@ -41,8 +41,6 @@ def save_exchange_rate(rate):
                   separators=(',', ': '))
 
 
-
-
 def generate_embed():
     embed = discord.Embed(
         title="Doktorminiszterelnökúr, a mostani jelentés készen van",
