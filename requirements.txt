@@ -1,0 +1,5 @@
+numpy
+matplotlib
+discord.py
+google-currency
+python-dotenv
