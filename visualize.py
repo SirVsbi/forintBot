@@ -1,4 +1,5 @@
 from __future__ import annotations
+from itertools import count
 
 import json
 from pathlib import Path
@@ -20,9 +21,6 @@ class ExchangeRateHistory:
     records: List[ExchangeRateRecord]
     plotFormat: ClassVar[Dict[str, Any]]
 
-    class RecordNotFoundException(Exception):
-        pass
-
     @classmethod
     def fromJson(cls, jsonPath: Path) -> ExchangeRateHistory:
         with open(jsonPath, "r") as jsonFile:
@@ -33,22 +31,24 @@ class ExchangeRateHistory:
                 history.records.append(ExchangeRateRecord(time, float(exchangeRate)))
             return history
 
-    def _recordCountSince(self, since: datetime) -> int:
-        index = 0
-        while self.records[-(index+1)].time >= since:
-            index += 1
+    def _recordCount(self, since: datetime) -> int:
+        count = 0
+        while self.records[-(count+1)].time >= since:
+            count += 1
+        return count
 
-    def historySince(self, since: datetime) -> ExchangeRateHistory:
-        index = self._recordCountSince(since)
-        if index == 0:
-            raise ExchangeRateHistory.RecordNotFoundException(f"No record since {since.isoformat()}")
-        return ExchangeRateHistory(self.records[-(index+1):])
+    def lastRecords(self, since: datetime) -> ExchangeRateHistory:
+        count = self._recordCountSince(since)
+        if count == 0:
+            return ExchangeRateHistory([])
+        else:
+            return ExchangeRateHistory(self.records[-count:])
 
 
     def plot(self, output: Path, since: datetime | None = None) -> None:
         fig, ax = plt.subplots()
 
-        index = self._recordCountSince(since) + 1 if since is not None else 0
+        index = self._recordCount(since) + 1 if since is not None else 0
         x, y = zip(*self.records[-index:])
 
         ax.plot(x, y, **ExchangeRateHistory.plotFormat)
@@ -58,9 +58,13 @@ class ExchangeRateHistory:
 ExchangeRateHistory.plotFormat = {
     "linestyle": "dashed",
     "linewidth": 2,
-    "color": "green",
+    "color": "salmon",
     "marker": "D",
     "markersize": 4,
-    "markerfacecolor": "red",
-    "markeredgecolor": "red"
+    "markerfacecolor": "crimson",
+    "markeredgecolor": "crimson"
 }
+
+if __name__ == "__main__":
+    hist = ExchangeRateHistory.fromJson(Path("data.json"))
+    hist.plot(Path("amogus.png"))

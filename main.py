@@ -1,14 +1,26 @@
+from __future__ import annotations
+
+from cmath import sin
+from enum import Enum, unique
 import json
+from pathlib import Path
 
 from discord.ext.commands import bot
 from google_currency import convert
 import os
 import json
-import datetime
+from datetime import datetime, timedelta
 import discord
 from dotenv import load_dotenv
 import asyncio
 from discord.ext import commands, tasks
+
+from .visualize import ExchangeRateHistory
+
+
+_JSON_PATH = Path("data.json")
+_GRAPH_PATH = Path("graph.png")
+
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -32,7 +44,7 @@ def get_any_to_any_exchange_rate(currency_from: str, currency_to: str, amount: f
 
 
 def save_exchange_rate(rate):
-    timestamp = str(datetime.datetime.utcnow().timestamp())
+    timestamp = str(datetime.utcnow().timestamp())
     filename = "data.json"
     data = {}
 
@@ -50,6 +62,39 @@ def save_exchange_rate(rate):
                   indent=4,
                   separators=(',', ': '))
 
+
+@unique
+class LastInterval(Enum):
+    HOUR = timedelta(hours=1)
+    DAY = timedelta(days=1)
+    WEEK = timedelta(days=7)
+    MONTH = timedelta(days=30)
+    YEAR = timedelta(days=365)
+
+    @classmethod
+    def fromString(string: str) -> LastInterval:
+        match string:
+            case "órai":
+                return LastInterval.HOUR
+            case "napi":
+                return LastInterval.DAY
+            case "heti":
+                return LastInterval.WEEK
+            case "havi":
+                return LastInterval.MONTH
+            case "évi":
+                return LastInterval.YEAR
+            case _:
+                raise ValueError(f"{string} cannot be converted to LastInterval")
+
+def visualize_history(last: LastInterval) -> Path:
+    now = datetime.utcnow()
+    history = ExchangeRateHistory.fromJson(_JSON_PATH)
+    history.plot(
+        output=_GRAPH_PATH,
+        since=now - last.value
+    )
+    return _GRAPH_PATH
 
 def generate_embed(currency_from: str, currency_to: str, exchange_rate, text: str | None = None) -> discord.Embed:
     embed = discord.Embed(
@@ -87,17 +132,29 @@ async def on_ready():
 
 @client.command()
 async def árfolyam(ctx, *args):
+    lastInterval = None
     if len(args) == 0:
         exchange_rate = getEUR_HUF_exchange_rate()
         embed = generate_embed("EUR", "HUF", exchange_rate)
+        lastInterval = LastInterval.WEEK
     elif len(args) == 1:
-        embed = exchange_any_to_any(args[0])
+        if args[0].isdigit():
+            embed = exchange_any_to_any(args[0])
+        else:
+            try:
+                exchange_rate = getEUR_HUF_exchange_rate()
+                embed = generate_embed("EUR", "HUF", exchange_rate)
+                lastInterval = LastInterval.fromString(args[0])
+            except ValueError:
+                pass
     elif len(args) == 2:
         embed = exchange_any_to_any(args[0], args[1])
     elif len(args) == 3:
         embed = exchange_any_to_any(args[0], args[1], float(args[2]))
     channel = client.get_channel(990292982274097302)
     await ctx.channel.send(embed=embed)
+    if lastInterval is not None:
+        await ctx.channel.send(file=discord.File(visualize_history(lastInterval)))
 
 
 def exchange_any_to_any(currency_from: str = "eur", currency_to: str = "huf", amount: float = 1) -> discord.Embed:
